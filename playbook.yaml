@@ -1,0 +1,30 @@
+---
+- hosts: all
+
+  pre_tasks:
+  - name: Copy certificate
+    copy: 
+      src: "{{ item.src }}"
+      dest: "{{ item.dst }}"
+      mode: 0600
+      owner: root
+      group: root
+    with_items:
+     - { src: "{{ ssl_certificate }}", dst: "{{ nginx_ssl_certificate }}" }
+     - { src: "{{ ssl_certificate_key }}", dst: "{{ nginx_ssl_certificate_key }}" }
+    when: "{{ nginx_ssl }}"
+    become: yes
+  
+  - name: Create folder for contract promotion
+    file:
+      path: "{{ item }}"
+      state: directory
+      mode: 0755
+    with_items:
+     - "{{ contract_desc | dirname }}"
+    become: yes
+
+  roles:
+    - geerlingguy.ntp
+    - parity-node
+    - parity-contract-publish

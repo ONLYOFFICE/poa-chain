@@ -1,0 +1,10 @@
+parity_config_path: "/etc/parity"
+parity_config: "{{ parity_config_path }}/config.toml"
+parity_spec: "{{ parity_config_path }}/spec.json"
+parity_pwd: "{{ parity_config_path }}/auth.pwd"
+parity_deb: "http://d1h4xl4cr1h0mo.cloudfront.net/v1.5.7/x86_64-unknown-linux-gnu/parity_1.5.7_amd64.deb"
+parity_package: parity
+
+nginx_config_path: "/etc/nginx"
+nginx_includes_path: "{{ nginx_config_path }}/includes"
+

@@ -1,0 +1,24 @@
+[parity]
+chain = "{{ parity_spec }}"
+base_path = "{{ parity_path }}"
+
+[network]
+{% for key, value in parity_network_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+[rpc]
+{% for key, value in parity_rpc_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+[ui]
+{% for key, value in parity_ui_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+[dapps]
+{% for key, value in parity_dapps_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+

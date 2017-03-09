@@ -1,0 +1,4 @@
+{% for authorities in parity_authorities %}
+{{ authorities.pwd }}
+{% endfor %}
+

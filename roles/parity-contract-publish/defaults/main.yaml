@@ -1,0 +1,9 @@
+parity_url: localhost:8080
+contract_url: {}
+contract_file: "/tmp/contract.sol"
+contract_desc: "/tmp/contract.json"
+
+contract_gas: {}
+contract_from: {}
+contract_user: {}
+

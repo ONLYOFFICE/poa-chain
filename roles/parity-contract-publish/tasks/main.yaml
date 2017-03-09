@@ -1,0 +1,75 @@
+---
+- name: Add solc repo
+  apt_repository:
+    repo: "{{ solc_repo }}" 
+  become: yes
+
+- name: Install solc.
+  apt: 
+    name: solc
+    state: installed
+  become: true
+
+- name: Get contract.
+  get_url:
+    url: "{{ contract_url }}"
+    dest: "{{ contract_file }}"
+    force: yes
+  register: contract
+
+- name: Compile contract
+  shell: "solc --bin --abi {{ contract_file }}"
+  register: byte_code
+  when: contract.changed
+
+- name: Deploy contract
+  uri:
+    url: "{{ parity_url }}"
+    method: POST
+    HEADER_Content-Type: "application/json"
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "personal_sendTransaction"
+      params:
+        - gas: "{{ contract_gas }}"
+          from: "{{ contract_from }}"
+          data: "0x{{ byte_code.stdout_lines.3 }}"
+        - "{{ contract_user }}"
+      id: 0
+    return_content: yes
+  register: contract_hash
+  when: contract.changed
+
+#- debug:
+#    msg: "Contract hash is {{ contract_hash.json.result }}"
+
+- name: Get contract address
+  uri:
+    url: "{{ parity_url }}"
+    method: POST
+    HEADER_Content-Type: "application/json"
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "eth_getTransactionReceipt"
+      params:
+        - "{{ contract_hash.json.result }}"
+      id: 0
+    return_content: yes
+  register: contract_addr
+  when: contract.changed
+
+- name: Set contract json
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dst }}"
+  with_items:
+    - { src: "contract.json.jn2", dst: "{{ contract_desc }}" }
+  become: yes
+  when: contract.changed
+
+- debug:
+    msg: "Contract address is {{ contract_addr.json.result.contractAddress }}"
+  when: contract.changed
+

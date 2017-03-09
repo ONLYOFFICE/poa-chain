@@ -1,0 +1,14 @@
+ location / {
+
+{% if nginx_ssl %}
+   sub_filter_types *;
+   sub_filter 'ws://' 'wss://';
+#   sub_filter 'http://' 'https://';
+   sub_filter_once off;
+{% endif %}
+
+   proxy_pass http://127.0.0.1:{{ parity_ui_entries.port}};
+
+   proxy_http_version 1.1;
+   proxy_read_timeout 86400;
+ }

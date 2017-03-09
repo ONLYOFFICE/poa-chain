@@ -1,0 +1,158 @@
+- name: Install some packages
+  apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - supervisor
+    - nginx
+    - nodejs
+    - nodejs-legacy
+    - npm
+  become: yes
+
+- name: Install "json" node.js package globally.
+  npm:
+    name: json
+    global: yes
+  become: yes
+
+- name: Check if parity is installed
+  command: dpkg-query -W parity
+  register: parity_check_deb
+  failed_when: parity_check_deb.rc > 1
+  changed_when: parity_check_deb.rc == 1  
+
+- name: Download parity
+  get_url: 
+    url="{{ parity_deb }}"
+    dest="{{ ansible_user_dir }}/parity.deb"
+  become: yes
+  when: parity_check_deb.rc == 1
+
+- name: Install parity package
+  apt: deb="{{ ansible_user_dir }}/parity.deb"
+  become: yes
+  when: parity_check_deb.rc == 1
+
+- name: Create parity's folders
+  file: 
+    path: "{{ item }}"
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+  with_items:
+  - "{{ parity_config_path }}"
+  - "{{ nginx_includes_path }}"
+  - "{{ parity_path }}"
+  become: yes
+
+- name: Remove default nginx config
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+  - /etc/nginx/sites-enabled/default
+  become: yes
+
+- name: Copy parity and supervisor configs
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dst }}"
+  with_items:
+    - { src: "supervisor/parity.conf.jn2", dst: "/etc/supervisor/conf.d/parity.conf" }
+    - { src: "parity/config.toml.jn2", dst: "{{ parity_config }}" }
+    - { src: "parity/spec.json.jn2", dst: "{{ parity_spec }}" }
+    - { src: "parity/auth.pwd.jn2", dst: "{{ parity_pwd }}" }
+  become: yes
+
+- name: Restart supervisor services
+  service:
+    name: "{{ item }}"
+    state: restarted
+    sleep: 5
+  with_items:
+   - supervisor
+
+- name: Copy nginx config
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dst }}"
+  with_items:
+    - { src: "nginx/default.conf.jn2", dst: "{{ nginx_config_path }}/conf.d/default.conf"}
+    - { src: "nginx/includes/parity-ui.conf.jn2", dst: "{{ nginx_includes_path }}/parity-ui.conf"}
+    - { src: "nginx/includes/parity-rpc.conf.jn2", dst: "{{ nginx_includes_path }}/parity-rpc.conf"}
+    - { src: "nginx/includes/parity-dapps.conf.jn2", dst: "{{ nginx_includes_path }}/parity-dapps.conf"}
+  notify: reload nginx
+  become: yes
+
+- name: Create authority address
+  uri:
+    url: "http://localhost:{{ parity_rpc_entries.port }}"
+    method: POST
+    HEADER_Content-Type: "application/json"
+    body_format: json
+    body: 
+      jsonrpc: "2.0"
+      method: "parity_newAccountFromPhrase"
+      params: 
+        - "{{ item.phrase }}"
+        - "{{ item.pwd }}"
+      id: 0
+  with_items:
+    "{{ parity_authorities }}"
+  register: auth_addr
+
+- name: Create users
+  uri:
+    url: "http://localhost:{{ parity_rpc_entries.port }}"
+    method: POST
+    HEADER_Content-Type: "application/json"
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "parity_newAccountFromPhrase"
+      params:
+        - "{{ item.phrase }}"
+        - "{{ item.pwd }}"
+      id: 0
+  with_items:
+    "{{ parity_users }}"
+  register: user_addr
+
+- name: Add authority address
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list.push('{{ item.json.result }}')" 
+  with_items:
+    "{{ auth_addr.results }}"
+
+- name: Add user address
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ item.json.result }}'] = {}"
+  with_items:
+    "{{ user_addr.results }}"
+
+- name: Add user balance
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ item.0.json.result }}']['balance'] = '{{ item.1.balance }}'"
+  with_together:
+    - "{{ user_addr.results }}"
+    - "{{ parity_users }}"
+
+- name: Add miner
+  ini_file:
+    dest: "{{ parity_config }}"
+    section: "{{ item.sec }}"
+    option: "{{ item.opt }}"
+    value: "{{ item.val }}"
+  with_items:
+    - {sec: account, opt: password, val: '["{{ parity_pwd }}"]'}
+    - {sec: mining, opt: engine_signer, val: '"{{ auth_addr.results.0.json.result }}"'}
+    - {sec: mining, opt: reseal_on_txs, val: '"none"'}
+    - {sec: mining, opt: gas_floor_target , val: '"17000000"'}
+  become: yes
+
+- name: Restart supervisor services
+  service:
+    name: "{{ item }}"
+    state: restarted
+    sleep: 5
+  with_items:
+   - supervisor

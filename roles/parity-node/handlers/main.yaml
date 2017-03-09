@@ -1,0 +1,13 @@
+---
+- name: restart supervisor
+  service:
+    name: supervisor
+    state: restarted
+    sleep: 5
+  become: yes
+
+- name: reload nginx
+  service: 
+    name: nginx
+    state: reloaded
+  become: yes

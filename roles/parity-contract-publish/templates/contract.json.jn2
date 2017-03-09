@@ -1,0 +1,4 @@
+{
+  "contractAddress": "{{ contract_addr.json.result.contractAddress }}",
+  "contractAbi": {{ byte_code.stdout_lines.5 }}
+}

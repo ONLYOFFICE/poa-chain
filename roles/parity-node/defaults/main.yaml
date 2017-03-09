@@ -1,0 +1,30 @@
+parity_path: /var/lib/parity
+
+parity_authorities: []
+#  - phrase: node0
+#    pwd: node0
+
+parity_users: []
+#  - phrase: user
+#    pwd: user
+#    balance: 10000000000000000000000
+
+parity_network_entries:
+ port: 30300
+
+parity_rpc_entries:
+ port: 8545
+ apis: '["web3", "eth", "net", "personal", "parity", "parity_set", "traces", "rpc", "parity_accounts"]'
+
+parity_dapps_entries:
+ port: 8080
+
+parity_ui_entries:
+ port: 8180
+
+nginx_port: 80
+nginx_ssl: false
+nginx_ssl_port: 443
+nginx_ssl_certificate: {}
+nginx_ssl_certificate_key: {}
+nginx_ssl_redirect: true
