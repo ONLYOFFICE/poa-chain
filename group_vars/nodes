@@ -1,9 +1,4 @@
 parity_url: "http://localhost:{{ parity_rpc_entries.port }}"
-contract_url: "https://raw.githubusercontent.com/ONLYOFFICE/ethereum-contracts/master/DocContract5.sol"
-
-contract_gas: "0x90000000"
-contract_from: "{{ user_addr.results.0.json.result }}"
-contract_user: "{{ parity_users.0.phrase }}"
 
 parity_rpc_entries:
  port: 8545
@@ -16,4 +11,7 @@ parity_ui_entries:
 parity_dapps_entries:
   port: 8080
 
-contract_desc: /var/lib/documents/contract.json
+parity_users:
+  - phrase: user
+    pwd: user
+    balance: 10000000000000000000000

@@ -1,4 +1,5 @@
 parity_path: /var/lib/parity
+parity_url: "http://localhost:{{ parity_rpc_entries.port }}"
 
 parity_authorities: []
 #  - phrase: node0

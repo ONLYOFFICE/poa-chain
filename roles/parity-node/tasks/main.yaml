@@ -88,7 +88,7 @@
 
 - name: Create authority address
   uri:
-    url: "http://localhost:{{ parity_rpc_entries.port }}"
+    url: "{{ parity_url }}"
     method: POST
     HEADER_Content-Type: "application/json"
     body_format: json
@@ -105,7 +105,7 @@
 
 - name: Create users
   uri:
-    url: "http://localhost:{{ parity_rpc_entries.port }}"
+    url: "{{ parity_url }}"
     method: POST
     HEADER_Content-Type: "application/json"
     body_format: json
@@ -120,21 +120,60 @@
     "{{ parity_users }}"
   register: user_addr
 
+- name: Get enode address
+  uri:
+    url: "{{ parity_url }}"
+    method: POST
+    HEADER_Content-Type: "application/json"
+    body_format: json
+    body:
+      jsonrpc: "2.0"
+      method: "parity_enode"
+      params: []
+      id: 0
+  register: enode_addr
+  until: enode_addr.json.result is defined
+  retries: 5
+  delay: 3
+
+- name: Debug auth_addr
+  debug:
+    msg: "Authority address is {{ hostvars[item].auth_addr.results.0.json.result }}"
+  with_inventory_hostnames: nodes
+
+- name: Debug user_addr
+  debug:
+    msg: "User address is {{ hostvars[item].user_addr.results.0.json.result }}"
+  with_inventory_hostnames: nodes
+
+- name: Debug endnode_addr
+  debug:
+    msg: "Endnode address is {{ hostvars[item].enode_addr.json.result }}"
+  with_inventory_hostnames: nodes
+
+- name: Clean authority address list
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list = []" 
+  with_inventory_hostnames: nodes
+
 - name: Add authority address
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list.push('{{ item.json.result }}')" 
-  with_items:
-    "{{ auth_addr.results }}"
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list.push('{{ hostvars[item].auth_addr.results.0.json.result }}')" 
+  with_inventory_hostnames: nodes
 
 - name: Add user address
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ item.json.result }}'] = {}"
-  with_items:
-    "{{ user_addr.results }}"
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ hostvars[item].user_addr.results.0.json.result }}'] = {}"
+  with_inventory_hostnames: nodes
 
 - name: Add user balance
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ item.0.json.result }}']['balance'] = '{{ item.1.balance }}'"
-  with_together:
-    - "{{ user_addr.results }}"
-    - "{{ parity_users }}"
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ hostvars[item].user_addr.results.0.json.result }}']['balance'] = '{{ hostvars[item].parity_users.0.balance }}'"
+  with_inventory_hostnames: nodes
+
+- name: Clean endnode address list
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.nodes = []" 
+  with_inventory_hostnames: nodes
+
+- name: Add endnode address
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.nodes.push('{{ hostvars[item].enode_addr.json.result }}')" 
+  with_inventory_hostnames: nodes
 
 - name: Add miner
   ini_file:
