@@ -1,6 +1,14 @@
 ---
 - hosts: all
+  gather_facts: False
+  tasks:
+  - name: install python 2
+    raw: test -e /usr/bin/python || (apt -y update && apt install -y python-minimal)
 
+- hosts: all
+  vars:
+    - parity_config_path: "/etc/parity"
+    - parity_spec: "{{ parity_config_path }}/spec.json"
   pre_tasks:
   - name: Copy certificate
     copy: 
@@ -14,17 +22,27 @@
      - { src: "{{ ssl_certificate_key }}", dst: "{{ nginx_ssl_certificate_key }}" }
     when: "{{ nginx_ssl }}"
     become: yes
-  
-  - name: Create folder for contract promotion
-    file:
-      path: "{{ item }}"
-      state: directory
-      mode: 0755
-    with_items:
-     - "{{ contract_desc | dirname }}"
-    become: yes
-
   roles:
+    - geerlingguy.nodejs
     - geerlingguy.ntp
+    - swapfile
     - parity-node
-    - parity-contract-publish
+    - { role: parity-contract-publish, contract_src: contracts/FilePasswordStorage.sol,  contract_publish_output: /tmp/FilePasswordStorage.sol.out.json, contract_publish_from: '{{ hostvars[inventory_hostname].user_addr.results.0.json.result }}', contract_publish_from_unlockPass: '{{ parity_users[0].pwd }}' }
+    - { role: parity-contract-publish, contract_src: contracts/Developer.sol,  contract_publish_output: /tmp/Developer.sol.out.json, contract_publish_from: '{{ hostvars[inventory_hostname].user_addr.results.0.json.result }}', contract_publish_from_unlockPass: '{{ parity_users[0].pwd }}' }
+    - weareinteractive.pm2
+  post_tasks:
+    - name: Include vars of /tmp/Developer.sol.out.json into the 'contract_publish_output' variable
+      include_vars:
+        file: /tmp/Developer.sol.out.json
+        name: contract_publish_output
+      run_once: true
+      delegate_to: 127.0.0.1
+    - name: Add validator contract address
+      shell: json -I -q -f "{{ parity_spec }}" -e "this.params.transactionPermissionContract = '{{ contract_publish_output.contractAddress }}'"
+    - name: Restart supervisor services
+      service:
+        name: "{{ item }}"
+        state: restarted
+        sleep: 5
+      with_items:
+        - supervisor

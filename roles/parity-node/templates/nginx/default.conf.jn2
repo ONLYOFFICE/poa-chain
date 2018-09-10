@@ -1,68 +1,146 @@
-map $http_x_forwarded_proto $the_scheme {
-     default $http_x_forwarded_proto;
-     "" $scheme;
-}
-
-map $http_x_forwarded_host $the_host {
-    default $http_x_forwarded_host;
-    "" $host;
-}
-
-map $http_upgrade $proxy_connection {
-  default upgrade;
-  "" close;
-}
-
-proxy_set_header Upgrade $http_upgrade;
-proxy_set_header Connection $proxy_connection;
-# proxy_set_header Host $host;
-proxy_set_header X-Forwarded-Host $the_host;
-proxy_set_header X-Forwarded-Proto $the_scheme;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-
 server {
-
-  listen 0.0.0.0:{{nginx_port}};
-  listen [::]:{{nginx_port}} default_server;
-
-{% if nginx_ssl %}
-   root /nowhere; ## root doesn't have to be a valid path since we are redirecting
-   rewrite ^ https://$host$request_uri? permanent;
-
-}
-server {
-  listen 0.0.0.0:{{nginx_ssl_port}};
-  listen [::]:{{nginx_ssl_port}} default_server;
+  listen {{ ansible_host }}:{{nginx_ssl_port}} ssl;
+  server_name {{ nginx_server_name }};  
 
   ssl on;
   ssl_certificate {{ nginx_ssl_certificate }};
   ssl_certificate_key {{ nginx_ssl_certificate_key }};
 
-{% endif %}
+  ssl_dhparam {{ nginx_ssl_dhparam }};
+
+  server_tokens off;
+
+  ssl_verify_client off;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+  ssl_prefer_server_ciphers on;
+  ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+  ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_tickets off; # Requires nginx >= 1.5.9
+
+  more_set_headers "{{ nginx_server_name }}";
+
+
+  location / {
+    #AUTH
+    auth_basic "Please enter username and password";
+    auth_basic_user_file {{ nginx_config_path }}/.htpasswd;
+
+    sub_filter "127.0.0.1" {{ nginx_server_name }};
+    sub_filter_once off;
+    sub_filter_types *;
+
+    proxy_pass http://127.0.0.1:{{ parity_ui_entries.port }};
+
+  }
+
+  
+  location /rpc {
+   
+    #AUTH
+    auth_basic          off;    
+
+    sub_filter "127.0.0.1" {{ nginx_server_name }};
+    sub_filter_once off;
+    sub_filter_types *;
+
+    proxy_set_header Accept-Encoding "";
+
+    set $jsonrpc_whitelist 'parity_wsUrl,parity_dappsUrl';
+    access_by_lua_file '/etc/nginx/conf.d/eth-jsonrpc-access.lua';
+    
+    proxy_pass http://127.0.0.1:{{ parity_rpc_entries.port }};
+    
+  } 
+
+  location /api/ping {
+    #AUTH
+    auth_basic          off;    
+
+    proxy_pass http://127.0.0.1:{{ parity_ui_entries.port }};
+
+  } 
+} 
+
+
+server {
+ listen {{ ansible_host }}:{{ parity_rpc_entries.port }} ssl;
+ server_name {{ nginx_server_name }};  
+
+ ssl on;
+ ssl_certificate {{ nginx_ssl_certificate }};
+ ssl_certificate_key {{ nginx_ssl_certificate_key }};
+
+ ssl_dhparam {{ nginx_ssl_dhparam }};
 
  server_tokens off;
 
- include {{ nginx_includes_path }}/parity-*.conf;
-} 
-
-server {
- listen {{ ansible_host }}:{{ parity_dapps_entries.port }};
+ ssl_verify_client off;
+ ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+ ssl_prefer_server_ciphers on;
+ ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+ ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+ ssl_session_cache shared:SSL:10m;
+ ssl_session_tickets off; # Requires nginx >= 1.5.9
 
 
  location / {
-   proxy_pass http://127.0.0.1:{{ parity_dapps_entries.port }};
+    #AUTH
+    auth_basic          off; 
+    
+    sub_filter "127.0.0.1" {{ nginx_server_name }};
+    sub_filter_once off;
+    sub_filter_types *;
+
+    more_set_headers "Content-Security-Policy: connect-src http: https: ws: wss:;frame-src 'self' http: https:;child-src 'self' http: https:;img-src 'self' 'unsafe-inline' data: blob: http: https:;style-src 'self' 'unsafe-inline' data: blob: https:;font-src 'self' data: https:;script-src 'self' 'unsafe-inline' 'unsafe-eval';worker-src 'self' 'unsafe-inline' 'unsafe-eval' blob: ;default-src 'self';sandbox allow-same-origin allow-forms allow-modals allow-popups allow-presentation allow-scripts;form-action 'none';block-all-mixed-content;frame-ancestors 127.0.0.1:8180 *.web3.site:8180 home.web3.site localhost:8180 rigo.network:8180 rigo.network:443 rigo.network kovan.endpoint.network:443 kovan.endpoint.network kovan03.endpoint.network:443 kovan03.endpoint.network srv03.endpoint.network srv03.endpoint.network:3000 appd";
+    more_set_headers "{{ nginx_server_name }}";
+
+    if ($request_method != GET) {      
+        set $jsonrpc_blacklist '';
+    	access_by_lua_file '{{ nginx_config_path }}/conf.d/eth-jsonrpc-access.lua'; 
+    }
+
+    proxy_set_header Accept-Encoding "";
+    proxy_pass http://127.0.0.1:{{ parity_rpc_entries.port }};
  }
+
 }
 
+
 server {
- listen {{ ansible_host }}:{{ parity_ui_entries.port }};
+ listen {{ ansible_host }}:{{ parity_websockets_entries.port }} ssl;
+ server_name {{ nginx_server_name }};  
+
+ ssl on;
+ ssl_certificate {{ nginx_ssl_certificate }};
+ ssl_certificate_key {{ nginx_ssl_certificate_key }};
+
+ ssl_dhparam {{ nginx_ssl_dhparam }};
+
+ server_tokens off;
+
+ ssl_verify_client off;
+ ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+ ssl_prefer_server_ciphers on;
+ ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+ ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+ ssl_session_cache shared:SSL:10m;
+ ssl_session_tickets off; # Requires nginx >= 1.5.9
+
 
  location / {
-   proxy_pass http://127.0.0.1:{{ parity_ui_entries.port }};
+    #AUTH
+    auth_basic          off; 
+    
+    sub_filter "127.0.0.1" {{ nginx_server_name }};
+    sub_filter_once off;
+    sub_filter_types *;
+      
+    set $jsonrpc_blacklist '';
+    access_by_lua_file '{{ nginx_config_path }}/conf.d/eth-jsonrpc-access.lua'; 
 
-   proxy_http_version 1.1;
-   proxy_set_header Upgrade $http_upgrade;
-   proxy_set_header Connection "upgrade";
-   proxy_read_timeout 86400;
+    proxy_set_header Accept-Encoding "";
+    proxy_pass http://127.0.0.1:{{ parity_websockets_entries.port }};
  }
-} 
+
+}

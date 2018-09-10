@@ -1,9 +1,5 @@
-parity_url: localhost:8080
-contract_url: {}
-contract_file: "/tmp/contract.sol"
-contract_desc: "/tmp/contract.json"
-
-contract_gas: {}
-contract_from: {}
-contract_user: {}
-
+parity_url: http://127.0.0.1:8545
+contract_src: {}
+contract_publish_from: {}
+contract_publish_from_unlockPass: {}
+contract_publish_output: "/tmp/contract.json"

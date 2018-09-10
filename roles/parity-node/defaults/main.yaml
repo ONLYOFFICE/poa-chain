@@ -1,31 +1,37 @@
-parity_path: /var/lib/parity
-parity_url: "http://localhost:{{ parity_rpc_entries.port }}"
+parity_authorities:
+  - phrase: node1
+    pwd: node1
 
-parity_authorities: []
-#  - phrase: node0
-#    pwd: node0
-
-parity_users: []
-#  - phrase: user
-#    pwd: user
-#    balance: 10000000000000000000000
+parity_users:
+  - phrase: user
+    pwd: user
+    balance: 10000000000000000000000
 
 parity_network_entries:
  port: 30300
 
 parity_rpc_entries:
- port: 8545
- apis: '["web3", "eth", "net", "personal", "parity", "parity_set", "traces", "rpc", "parity_accounts"]'
+ port: '8545'
+ interface: '"127.0.0.1"'
+ apis: '["web3,eth,parity,parity_accounts,net,personal"]'
+ cors: '["*"]'
 
-parity_dapps_entries:
- port: 8080
+parity_ipc_entries:
+ disable: 'true'
 
-parity_ui_entries:
- port: 8180
+parity_websockets_entries:
+ port: '8546'
+ interface: '"127.0.0.1"'
+ origins: '["https://{{ nginx_server_name }}", "https://{{ nginx_server_name }}:8545"]'
+ hosts: '["all"]'
+ apis: '["web3,eth,parity,parity_accounts,net,personal"]'
 
-nginx_port: 80
-nginx_ssl: false
-nginx_ssl_port: 443
-nginx_ssl_certificate: {}
-nginx_ssl_certificate_key: {}
-nginx_ssl_redirect: true
+parity_misc_entries:
+ log_file: '"/var/log/parity.log"'
+ color: 'true'
+
+request_ether_service:
+ src: '/var/www/onlyoffice.io/services/request-ether-service'
+ port: '3000'
+ 
+

@@ -1,12 +1,13 @@
 {
-    "name": "DemoPoA",
+    "name": "onlyoffice-PoA",
     "engine": {
         "authorityRound": {
             "params": {
-                "gasLimitBoundDivisor": "0x1000",
-                "stepDuration": "1",
+                "stepDuration": "5",
+                "maximumUncleCountTransition": 0,
+                "maximumUncleCount": 0,  
                 "validators" : {
-                    "list": []
+                    "safeContract": ""
                 }
             }
         }
@@ -14,7 +15,12 @@
     "params": {
         "maximumExtraDataSize": "0x20",
         "minGasLimit": "0x1388",
-        "networkID" : "0x2323"
+        "networkID" : "0x2323",
+        "gasLimitBoundDivisor": "0x400",
+	"eip140Transition": "0x0",
+        "eip211Transition": "0x0",
+        "eip214Transition": "0x0",
+        "eip658Transition": "0x0"
     },
     "genesis": {
         "seal": {
@@ -24,7 +30,7 @@
             }
         },
         "difficulty": "0x20",
-        "gasLimit": "0x100000000"
+        "gasLimit": "0x5B8D80"
     },
     "accounts": {
         "0x0000000000000000000000000000000000000001": { "balance": "1", "builtin": { "name": "ecrecover", "pricing": { "linear": { "base": 3000, "word": 0 } } } },

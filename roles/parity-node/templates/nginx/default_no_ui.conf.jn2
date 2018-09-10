@@ -1,0 +1,52 @@
+server {
+  listen {{ ansible_host }}:{{nginx_ssl_port}} ssl;
+  listen {{ ansible_host }}:{{ parity_rpc_entries.port }} ssl;
+
+  server_name {{ nginx_server_name }};  
+
+  ssl on;
+  ssl_certificate {{ nginx_ssl_certificate }};
+  ssl_certificate_key {{ nginx_ssl_certificate_key }};
+
+  ssl_dhparam {{ nginx_ssl_dhparam }};
+
+  server_tokens off;
+
+  ssl_verify_client off;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+  ssl_prefer_server_ciphers on;
+  ssl_ciphers "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH";
+  ssl_ecdh_curve secp384r1; # Requires nginx >= 1.1.0
+  ssl_session_cache shared:SSL:10m;
+  ssl_session_tickets off; # Requires nginx >= 1.5.9
+
+ # OCSP stapling
+  ssl_stapling on;
+  ssl_stapling_verify on;
+  resolver 8.8.8.8;
+
+  # Set HSTS to 365 days
+  add_header Strict-Transport-Security 'max-age=31536000; includeSubDomains';
+
+  location / {
+     sub_filter "127.0.0.1" {{ nginx_server_name }};
+     sub_filter_once off;
+     sub_filter_types *;
+
+     more_clear_headers Server;
+     header_filter_by_lua 'ngx.header["server"] = nil';
+
+     proxy_set_header Accept-Encoding "";
+
+     set $jsonrpc_whitelist 'eth_estimateGas,eth_blockNumber,net_version,net_listening,web3_clientVersion,eth_getTransactionByHash,eth_getTransactionReceipt,eth_sendRawTransaction,eth_getBalance,eth_getTransactionCount';
+     access_by_lua_file '{{ nginx_config_path }}/conf.d/eth-jsonrpc-access.lua'; 
+     proxy_pass http://127.0.0.1:{{ parity_rpc_entries.port }};
+  }
+
+
+  location /faucet {
+     proxy_set_header Accept-Encoding "";
+
+     proxy_pass http://127.0.0.1:{{ request_ether_service.port }};
+  }
+} 

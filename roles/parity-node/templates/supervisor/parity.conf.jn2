@@ -1,5 +1,5 @@
 [program:parity]
-command=parity --ui-no-validation -l debug -c {{ parity_config }}
+command=parity --ui-no-validation -c {{ parity_config }}
 autostart=true
 autorestart=true
 redirect_stderr=true

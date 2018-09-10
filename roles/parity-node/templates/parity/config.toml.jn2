@@ -12,13 +12,18 @@ base_path = "{{ parity_path }}"
 {{ key }} = {{ value }}
 {% endfor %}
 
-[ui]
-{% for key, value in parity_ui_entries.iteritems() %}
+[ipc]
+{% for key, value in parity_ipc_entries.iteritems() %}
 {{ key }} = {{ value }}
 {% endfor %}
 
-[dapps]
-{% for key, value in parity_dapps_entries.iteritems() %}
+[websockets]
+{% for key, value in parity_websockets_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+[misc]
+{% for key, value in parity_misc_entries.iteritems() %}
 {{ key }} = {{ value }}
 {% endfor %}
 

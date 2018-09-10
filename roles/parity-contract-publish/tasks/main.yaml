@@ -3,52 +3,61 @@
   apt_repository:
     repo: "{{ solc_repo }}" 
   become: yes
+  run_once: true
+  delegate_to: 127.0.0.1
 
 - name: Install solc.
   apt: 
     name: solc
-    state: installed
+    state: present
   become: true
-
-- name: Get contract.
-  get_url:
-    url: "{{ contract_url }}"
-    dest: "{{ contract_file }}"
-    force: yes
-  register: contract
+  run_once: true
+  delegate_to: 127.0.0.1
 
 - name: Compile contract
-  shell: "solc --bin --abi {{ contract_file }}"
+  shell: "solc --bin --abi --optimize {{ contract_src }}"
   register: byte_code
-  when: contract.changed
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- debug:
+    msg: "Deploy contract result is 0x{{ byte_code.stdout_lines.3 }}"
+  run_once: true
 
 - name: Deploy contract
   uri:
     url: "{{ parity_url }}"
     method: POST
-    HEADER_Content-Type: "application/json"
+    headers:
+      Content-Type: "application/json"
     body_format: json
     body:
       jsonrpc: "2.0"
       method: "personal_sendTransaction"
       params:
-        - gas: "{{ contract_gas }}"
-          from: "{{ contract_from }}"
+        - from: "{{ contract_publish_from }}"
           data: "0x{{ byte_code.stdout_lines.3 }}"
-        - "{{ contract_user }}"
+        - "{{ contract_publish_from_unlockPass }}"
       id: 0
     return_content: yes
   register: contract_hash
-  when: contract.changed
+  run_once: true
 
-#- debug:
-#    msg: "Contract hash is {{ contract_hash.json.result }}"
+
+- debug:
+    msg: "Deploy contract result is {{ contract_hash }}"
+  run_once: true
+
+
+- pause:
+    seconds: 5
 
 - name: Get contract address
   uri:
     url: "{{ parity_url }}"
     method: POST
-    HEADER_Content-Type: "application/json"
+    headers:
+      Content-Type: "application/json"
     body_format: json
     body:
       jsonrpc: "2.0"
@@ -58,18 +67,18 @@
       id: 0
     return_content: yes
   register: contract_addr
-  when: contract.changed
+  run_once: true
 
 - name: Set contract json
   template:
     src: "{{ item.src }}"
     dest: "{{ item.dst }}"
   with_items:
-    - { src: "contract.json.jn2", dst: "{{ contract_desc }}" }
+    - { src: "contract.json.jn2", dst: "{{ contract_publish_output }}" }
   become: yes
-  when: contract.changed
+  run_once: true
+  delegate_to: 127.0.0.1
 
 - debug:
     msg: "Contract address is {{ contract_addr.json.result.contractAddress }}"
-  when: contract.changed
 

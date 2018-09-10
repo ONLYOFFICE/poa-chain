@@ -1,17 +1,29 @@
-parity_url: "http://localhost:{{ parity_rpc_entries.port }}"
+nginx_server_name: testnet.onlyoffice.io
+nginx_auth_basic_login: admin
+nginx_auth_basic_password: 1111111111
 
-parity_rpc_entries:
- port: 8545
- apis: '["web3", "eth", "net", "personal", "parity", "parity_set", "traces", "rpc", "parity_accounts"]'
- cors: '"*"'
-
-parity_ui_entries:
-  port: 8088 
-
-parity_dapps_entries:
-  port: 8080
+parity_authorities:
+  - index: 0
+    phrase: chef bean ivory donkey section police valve daughter float snow spot option amazing mouse public
+    pwd: 1111111111
+  - index: 1
+    phrase: build destroy minimum edge goat yellow card mystery reunion slow lift gas dolphin weather gym
+    pwd: 1111111111
+  - index: 2
+    phrase: noodle ordinary innocent fish gap anxiety escape frown solid tell blossom affair shove glance celery
+    pwd: 111111111111
 
 parity_users:
-  - phrase: user
-    pwd: user
+  - phrase: huge curtain bronze noble reveal hotel maximum forest worth kid tongue offer canal like twelve
+    pwd: 111111111
     balance: 10000000000000000000000
+
+ssl_certificate: certs/wildcard.onlyoffice.io.crt
+ssl_certificate_key: certs/wildcard.onlyoffice.io.key
+
+pm2_apps:
+  - run: index.js
+    path: "{{ request_ether_service.src }}"
+    cmd: start
+
+pm2_service_name: pm2-root

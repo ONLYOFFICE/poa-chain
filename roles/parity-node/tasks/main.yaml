@@ -1,14 +1,57 @@
+- name: Add an Apt signing key, uses whichever key is at the URL
+  apt_key:
+    url: http://nginx.org/keys/nginx_signing.key
+    state: present
+
+- name: Enforce appropriate /tmp folder permissions
+  file:
+    path: /tmp
+    owner: root
+    group: root
+    mode: 0777
+  become: true
+  changed_when: false
+
+- apt_repository:
+    repo: deb http://nginx.org/packages/mainline/ubuntu/ xenial nginx
+    filename: nginx
+    state: present
+
+- apt_repository:
+    repo: deb-src http://nginx.org/packages/mainline/ubuntu/ xenial nginx
+    filename: nginx
+    state: present
+    update_cache: yes
+
+- openssl_dhparam:
+    path: '{{ nginx_ssl_dhparam }}'
+    size: 2048
+
 - name: Install some packages
   apt:
     name: "{{ item }}"
     state: present
   with_items:
     - supervisor
-    - nginx
-    - nodejs
-    - nodejs-legacy
-    - npm
+    - nginx-extras
+    - luajit
+    - lua-cjson
+    - htop
+    - nano
+    - python-pip
   become: yes
+
+- name: Install latest passlib with pip
+  pip: name=passlib
+
+# Add a user to a password file and ensure permissions are set
+- htpasswd:
+    path: '{{ nginx_config_path }}/.htpasswd'
+    name: '{{ nginx_auth_basic_login }}'
+    password: '{{ nginx_auth_basic_password }}'
+    owner: root
+    group: www-data
+    mode: 0640
 
 - name: Install "json" node.js package globally.
   npm:
@@ -16,23 +59,9 @@
     global: yes
   become: yes
 
-- name: Check if parity is installed
-  command: dpkg-query -W parity
-  register: parity_check_deb
-  failed_when: parity_check_deb.rc > 1
-  changed_when: parity_check_deb.rc == 1  
-
-- name: Download parity
-  get_url: 
-    url="{{ parity_deb }}"
-    dest="{{ ansible_user_dir }}/parity.deb"
+- name: Download and install parity package
+  apt: deb="{{ parity_deb }}"
   become: yes
-  when: parity_check_deb.rc == 1
-
-- name: Install parity package
-  apt: deb="{{ ansible_user_dir }}/parity.deb"
-  become: yes
-  when: parity_check_deb.rc == 1
 
 - name: Create parity's folders
   file: 
@@ -52,7 +81,8 @@
     path: "{{ item }}"
     state: absent
   with_items:
-  - /etc/nginx/sites-enabled/default
+  - '{{ nginx_config_path }}/sites-enabled/default'
+  - '{{ nginx_config_path }}/conf.d/default.conf'
   become: yes
 
 - name: Copy parity and supervisor configs
@@ -79,18 +109,56 @@
     src: "{{ item.src }}"
     dest: "{{ item.dst }}"
   with_items:
-    - { src: "nginx/default.conf.jn2", dst: "{{ nginx_config_path }}/conf.d/default.conf"}
-    - { src: "nginx/includes/parity-ui.conf.jn2", dst: "{{ nginx_includes_path }}/parity-ui.conf"}
-    - { src: "nginx/includes/parity-rpc.conf.jn2", dst: "{{ nginx_includes_path }}/parity-rpc.conf"}
-    - { src: "nginx/includes/parity-dapps.conf.jn2", dst: "{{ nginx_includes_path }}/parity-dapps.conf"}
+    - { src: "nginx/default_no_ui.conf.jn2", dst: "{{ nginx_config_path }}/conf.d/default.conf"}
+    - { src: "nginx/eth-jsonrpc-access.lua", dst: "{{ nginx_config_path }}/conf.d/eth-jsonrpc-access.lua"}
   notify: reload nginx
   become: yes
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+
+- name: Allow all access to tcp port 443
+  ufw:
+    rule: allow
+    port: 443
+    proto: tcp
+
+- ufw:
+    rule: limit
+    port: ssh
+    proto: tcp
+
+- name: Allow websocket and rpc connect to blockchain network
+  ufw:
+    rule: allow
+    port: '{{ item }}'
+    proto: tcp
+  with_items:
+    - 8546
+    - 8545
+
+- name: Deny incoming requests and reload UFW
+  ufw:
+    state: reloaded
+    policy: deny
+    direction: incoming
+
+- name: Allow blockchain nodes communication
+  ufw:
+    rule: allow
+    port: '{{ item }}'
+    proto: any
+  with_items:
+    - 30300
+
+- pause:
+    seconds: 5
 
 - name: Create authority address
   uri:
     url: "{{ parity_url }}"
     method: POST
-    HEADER_Content-Type: "application/json"
     body_format: json
     body: 
       jsonrpc: "2.0"
@@ -103,11 +171,11 @@
     "{{ parity_authorities }}"
   register: auth_addr
 
+
 - name: Create users
   uri:
     url: "{{ parity_url }}"
     method: POST
-    HEADER_Content-Type: "application/json"
     body_format: json
     body:
       jsonrpc: "2.0"
@@ -124,7 +192,6 @@
   uri:
     url: "{{ parity_url }}"
     method: POST
-    HEADER_Content-Type: "application/json"
     body_format: json
     body:
       jsonrpc: "2.0"
@@ -138,30 +205,70 @@
 
 - name: Debug auth_addr
   debug:
-    msg: "Authority address is {{ hostvars[item].auth_addr.results.0.json.result }}"
-  with_inventory_hostnames: nodes
+    msg: "Authority address is {{ auth_addr.results|json_query('[*].json.result') }}"
 
 - name: Debug user_addr
   debug:
-    msg: "User address is {{ hostvars[item].user_addr.results.0.json.result }}"
-  with_inventory_hostnames: nodes
+    msg: "User address is {{ user_addr.results|json_query('[*].json.result') }}"
 
 - name: Debug endnode_addr
   debug:
     msg: "Endnode address is {{ hostvars[item].enode_addr.json.result }}"
   with_inventory_hostnames: nodes
 
-- name: Clean authority address list
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list = []" 
-  with_inventory_hostnames: nodes
+- name: Add solc repo
+  apt_repository:
+    repo: "{{ solc_repo }}"
+  become: yes
+  run_once: true
+  delegate_to: 127.0.0.1
 
-- name: Add authority address
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.list.push('{{ hostvars[item].auth_addr.results.0.json.result }}')" 
-  with_inventory_hostnames: nodes
+- name: Install solc.
+  apt:
+    name: solc
+    state: present
+  become: true
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- name: Copy contracts
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ item.dst }}"
+  with_items:
+    - { src: "contracts/AdminValidatorList.sol", dst: "/tmp/AdminValidatorList.sol.tmp"}
+  become: yes
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- replace:
+    path: '/tmp/AdminValidatorList.sol.tmp'
+    regexp: '0x0000000000000000000000000000000000000001'
+    replace: "{{ hostvars[groups['nodes'][0]].auth_addr.results|json_query('[*].json.result')|join(',') }}"
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- replace:
+    path: '/tmp/AdminValidatorList.sol.tmp'
+    regexp: '0xffffffffffffffffffffffffffffffffffffffff'
+    replace: "{{ hostvars[groups['nodes'][0]].user_addr.results.0.json.result }}"
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- name: Compile contract
+  shell: "solc --bin --abi --optimize /tmp/AdminValidatorList.sol.tmp"
+  register: byte_code
+  run_once: true
+  delegate_to: 127.0.0.1
+
+- name: Add validator contract address
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.engine.authorityRound.params.validators.safeContract = '{{ contract_validators_addr }}'"
+
+- name: Add validator contract bytes code
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ contract_validators_addr }}'] = { "balance":'1', "constructor":'0x{{ byte_code.stdout_lines.3 }}'}"
 
 - name: Add user address
-  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ hostvars[item].user_addr.results.0.json.result }}'] = {}"
-  with_inventory_hostnames: nodes
+  shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ user_addr.results.0.json.result }}'] = {}"
 
 - name: Add user balance
   shell: json -I -q -f "{{ parity_spec }}" -e "this.accounts['{{ hostvars[item].user_addr.results.0.json.result }}']['balance'] = '{{ hostvars[item].parity_users.0.balance }}'"
@@ -183,7 +290,7 @@
     value: "{{ item.val }}"
   with_items:
     - {sec: account, opt: password, val: '["{{ parity_pwd }}"]'}
-    - {sec: mining, opt: engine_signer, val: '"{{ auth_addr.results.0.json.result }}"'}
+    - {sec: mining, opt: engine_signer, val: "\"{{ auth_addr.results[groups['nodes'].index(inventory_hostname)].json.result }}\""}
     - {sec: mining, opt: reseal_on_txs, val: '"none"'}
     - {sec: mining, opt: gas_floor_target , val: '"17000000"'}
   become: yes
@@ -195,3 +302,19 @@
     sleep: 5
   with_items:
    - supervisor
+
+- name: Copy services to the remote server
+  copy:
+    src: services/
+    dest: /var/www/onlyoffice.io/services
+
+- name: Install packages for request_ether_service
+  npm:
+    path: "{{ request_ether_service.src }}/"
+  become: yes
+
+- name: Set sender address from request-ether-service
+  shell: 'sed "s/\"sender\":.*,/\"sender\": \"{{ user_addr.results.0.json.result }}\",/" -i {{ request_ether_service.src }}/config.js'
+
+- name: Set sender unlock phrase from request-ether-service
+  shell: 'sed "s/\"senderUnlockPhrase\":.*,/\"senderUnlockPhrase\": \"{{ parity_users.0.pwd }}\",/" -i {{ request_ether_service.src }}/config.js'
