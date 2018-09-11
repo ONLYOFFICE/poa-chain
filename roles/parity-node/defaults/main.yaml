@@ -30,6 +30,11 @@ parity_misc_entries:
  log_file: '"/var/log/parity.log"'
  color: 'true'
 
+parity_mining_entries:
+ reseal_on_txs: '"none"'
+ min_gas_price: '20000000000'
+ tx_queue_no_unfamiliar_locals: 'true'
+
 request_ether_service:
  src: '/var/www/onlyoffice.io/services/request-ether-service'
  port: '3000'

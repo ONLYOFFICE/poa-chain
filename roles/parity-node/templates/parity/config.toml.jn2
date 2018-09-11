@@ -27,3 +27,8 @@ base_path = "{{ parity_path }}"
 {{ key }} = {{ value }}
 {% endfor %}
 
+[mining]
+{% for key, value in parity_mining_entries.iteritems() %}
+{{ key }} = {{ value }}
+{% endfor %}
+

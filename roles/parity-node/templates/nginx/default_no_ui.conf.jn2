@@ -38,7 +38,7 @@ server {
 
      proxy_set_header Accept-Encoding "";
 
-     set $jsonrpc_whitelist 'eth_estimateGas,eth_blockNumber,net_version,net_listening,web3_clientVersion,eth_getTransactionByHash,eth_getTransactionReceipt,eth_sendRawTransaction,eth_getBalance,eth_getTransactionCount';
+     set $jsonrpc_whitelist 'eth_call,eth_getBlockByNumber,eth_gasPrice,eth_estimateGas,eth_blockNumber,net_version,net_listening,web3_clientVersion,eth_getTransactionByHash,eth_getTransactionReceipt,eth_sendRawTransaction,eth_getBalance,eth_getTransactionCount';
      access_by_lua_file '{{ nginx_config_path }}/conf.d/eth-jsonrpc-access.lua'; 
      proxy_pass http://127.0.0.1:{{ parity_rpc_entries.port }};
   }
