@@ -26,6 +26,8 @@ var nacl = {};
 
 nacl.util = tweetnaclUtil;
 
+var etherRecipientQueue = new Array();
+
 app.listen(port, (err) => {
     if (err) {
         return console.log("something bad happened", err);
@@ -55,7 +57,7 @@ app.post("/faucet", (req, resp) => {
   
     if(!_web3.isConnected()) {
     
-        resp.status(503).send("[web3] Connection to " + _providerUri + " is lost");
+        resp.status(503).json({ "error":"[web3] Connection to " + _providerUri + " is lost"});
         resp.end();
 
         return;    
@@ -63,7 +65,7 @@ app.post("/faucet", (req, resp) => {
 
     if (!_addr || !_signature)
     {
-        resp.status(503).send("address or _signature is empty");
+        resp.status(503).json({ "error":"address or _signature is empty" });
         resp.end();
 
         return;     
@@ -71,80 +73,96 @@ app.post("/faucet", (req, resp) => {
     
     let _recoveredAddress = getRecoveredAddress(_addr, JSON.parse(_web3.toUtf8(_signature)));
 
-    if (_recoveredAddress === _addr)
-    {          
-        let balance = _web3.fromWei(_web3.eth.getBalance(_addr), "ether");
-        
-        if (balance.gte(5))
-        {
-            resp.status(403).send("balance recipient must be less than 5");
-            resp.end();
+    if (_recoveredAddress !== _addr) {
+        resp.status(401).json({ "error":"signature is not verify" });
+        resp.end();
 
-            return;
-        } 
+        return;  
+    }
+    
+    if (etherRecipientQueue.indexOf(_addr) > -1) {
+        resp.status(401).json({ "error":"Please wait... The previous request is processed."});
+        resp.end();
 
-        let balanceSender = _web3.fromWei(_web3.eth.getBalance(cnf.sender), "ether");
-        
-        if (balanceSender.lt(5))
-        {
-            resp.status(503).send("balance sender must be more than 5");
-            resp.end();          
+        return;  
+    }
+    
+    let balance = _web3.fromWei(_web3.eth.getBalance(_addr), "ether");
+    
+    if (balance.gte(cnf.quota))
+    {
+        resp.status(403).json({ "error":"balance recipient must be less than " + cnf.quota});
+        resp.end();
+
+        return;
+    } 
+
+    let balanceSender = _web3.fromWei(_web3.eth.getBalance(cnf.sender), "ether");
+    
+    if (balanceSender.lt(cnf.quota))
+    {
+        resp.status(503).json({"error":"balance sender must be more than " + cnf.quota});
+        resp.end();          
+
+        return;
+    } 
+    
+    let rawTx = {
+        nonce: _web3.toHex(_web3.eth.getTransactionCount(cnf.sender)),
+        from: cnf.sender,
+        gasPrice: 0,
+        to: _addr, 
+        value:  _web3.toHex(_web3.toWei(cnf.quota, "ether"))
+    }
+
+    var options = {
+        uri: _providerUri,
+        method: 'POST',
+        json: {
+            "method":"personal_sendTransaction",
+            "params": [rawTx,cnf.senderUnlockPhrase],
+            "id": 0,
+            "jsonrpc": "2.0"
+        }
+    };
+
+    _web3.eth.getTransactionReceiptMined = getTransactionReceiptMined;
+    
+    etherRecipientQueue.push(_addr);
    
-            return;
-        } 
+    requestUri(options, function (error, responseUri, body) {
+
+        let etherRecipientQueueIndex = etherRecipientQueue.indexOf(_addr);
         
-        let rawTx = {
-            nonce: _web3.toHex(_web3.eth.getTransactionCount(cnf.sender)),
-            from: cnf.sender,
-            gasPrice: _web3.toHex(_web3.eth.estimateGas({from: cnf.sender, to: _addr, value: _web3.toWei(cnf.quota, "ether")})),
-     //       gasLimit: _web3.toHex(_web3.eth.getBlock("latest").gasLimit),
-            to: _addr, 
-            value:  _web3.toHex(_web3.toWei(cnf.quota, "ether"))
+        if (!(!error && responseUri.statusCode == 200 && !body.error)) {
+            
+            etherRecipientQueue.splice(etherRecipientQueueIndex, 1);
+
+            resp.status(503).json({"error":"error request to " + _providerUri});
+            resp.end();            
+
+            return;
         }
 
-        var options = {
-            uri: _providerUri,
-            method: 'POST',
-            json: {
-                "method":"personal_sendTransaction",
-                "params": [rawTx,cnf.senderUnlockPhrase],
-                "id": 0,
-                "jsonrpc": "2.0"
-            }
-        };
+        let _txHash = body.result;
 
-        _web3.eth.getTransactionReceiptMined = getTransactionReceiptMined;
+        _web3.eth.getTransactionReceiptMined(_txHash, 300).then(result => {	
+            etherRecipientQueue.splice(etherRecipientQueueIndex, 1);
 
-        requestUri(options, function (error, responseUri, body) {
+            resp.statusCode = 200;  // OK 
+            resp.end(); 
+           
+            return;
+        },
+        error => {
+            etherRecipientQueue.splice(etherRecipientQueueIndex, 1);
 
-            if (!(!error && responseUri.statusCode == 200 && !body.error)) {
-
-                resp.status(503).send("error request to " + _providerUri);
-                resp.end();            
-
-                return;
-            }
-
-            let _txHash = body.result;
-
-            _web3.eth.getTransactionReceiptMined(_txHash, 300).then(result => {								
-                resp.statusCode = 200;  // OK 
-                resp.end(); 
-
-                return;
-            },
-            error => {
-                resp.statusCode = 503; // Server Error  
-                resp.end();
-                
-                return;
-            });              
+            resp.statusCode = 503; // Server Error  
+            resp.end();
+            
+            return;
         });              
-    }
-    else 
-    {
-        resp.status(401).send("signature is not verify");
-    }   
+    }); 
 });
 
 
