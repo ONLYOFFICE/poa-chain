@@ -297,8 +297,6 @@
   with_items:
     - {sec: account, opt: password, val: '["{{ parity_pwd }}"]'}
     - {sec: mining, opt: engine_signer, val: "\"{{ auth_addr.results[groups['nodes'].index(inventory_hostname)].json.result }}\""}
-    - {sec: mining, opt: reseal_on_txs, val: '"none"'}
-    - {sec: mining, opt: gas_floor_target , val: '"17000000"'}
   become: yes
 
 - name: Restart supervisor services
