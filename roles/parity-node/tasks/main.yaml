@@ -25,23 +25,26 @@
 
 - openssl_dhparam:
     path: '{{ nginx_ssl_dhparam }}'
-    size: 2048
+    size: 4096
 
 - name: Install some packages
   apt:
     name: "{{ item }}"
     state: present
   with_items:
-    - supervisor
+    - supervisor   
     - nginx-extras
     - luajit
     - lua-cjson
     - htop
     - nano
     - python-pip
+    - build-essential  # for parity 
+    - cmake            # for parity
+    - libudev-dev      # for parity
   become: yes
 
-- name: Install latest passlib with pip
+- name: Install latest passlib with pip # needed for htpasswd
   pip: name=passlib
 
 # Add a user to a password file and ensure permissions are set
@@ -59,8 +62,11 @@
     global: yes
   become: yes
 
-- name: Download and install parity package
-  apt: deb="{{ parity_deb }}"
+- name: Download parity package
+  get_url: 
+    url: "{{ parity_deb }}"
+    dest: /usr/bin/
+    mode: 0555
   become: yes
 
 - name: Create parity's folders
