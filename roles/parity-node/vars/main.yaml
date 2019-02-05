@@ -4,7 +4,7 @@ parity_config_path: "/etc/parity"
 parity_config: "{{ parity_config_path }}/config.toml"
 parity_spec: "{{ parity_config_path }}/spec.json"
 parity_pwd: "{{ parity_config_path }}/auth.pwd"
-parity_deb: "https://releases.parity.io/ethereum/v2.1.10/x86_64-unknown-linux-gnu/parity"
+parity_deb: "https://releases.parity.io/ethereum/v2.1.11/x86_64-unknown-linux-gnu/parity"
 parity_package: parity
 
 nginx_config_path: "/etc/nginx"
